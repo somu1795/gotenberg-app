@@ -347,8 +347,6 @@ pdf.yourdomain.com {
 
 Caddy automatically provisions and renews TLS certificates via Let's Encrypt.
 
-> **Why Caddy over HAProxy/Nginx?** Your gateway already handles all the "smart" logic (concurrency, circuit breaking, fairness). The reverse proxy only needs to terminate TLS and forward bytes. Caddy does this with auto-TLS and zero config files to manage. HAProxy's advantages (TCP-level balancing, 100k+ connections) aren't relevant for a document conversion API.
-
 ## Project Structure
 
 ```
