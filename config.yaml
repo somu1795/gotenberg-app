@@ -1,0 +1,67 @@
+# Gotenberg Gateway Configuration
+# ================================
+
+server:
+  # Port the gateway listens on
+  port: 9225
+  # Host to bind to (0.0.0.0 for all interfaces)
+  host: "0.0.0.0"
+
+gotenberg:
+  # Upstream Gotenberg container URL
+  upstream_url: "http://localhost:9125"
+  # Timeout for requests forwarded to Gotenberg (seconds)
+  request_timeout: 120
+
+concurrency:
+  # Maximum simultaneous jobs sent to Gotenberg
+  # Rule of thumb: ~1.5 jobs per GB of Gotenberg container RAM
+  max_concurrent: 10
+
+  # Maximum requests waiting in queue when all slots are busy
+  max_queue: 50
+
+  # How long a request waits in queue before timing out (seconds)
+  queue_timeout: 60
+
+  # Maximum concurrent jobs per IP (fairness — prevents one user hogging all slots)
+  per_ip_concurrent: 2
+
+  # Maximum queued requests per IP
+  per_ip_queue: 5
+
+circuit_breaker:
+  # Number of consecutive Gotenberg failures before opening the circuit
+  failure_threshold: 5
+  # How long the circuit stays open before trying again (seconds)
+  recovery_timeout: 30
+
+security:
+  # CORS allowed origins (* for all, or list specific domains)
+  cors_origins:
+    - "*"
+
+  # IP allowlist (leave empty to allow all IPs). Supports CIDR notation.
+  ip_allowlist: []
+
+  # IP blocklist (checked before allowlist). Supports CIDR notation.
+  ip_blocklist: []
+
+  # Maximum upload size in bytes (default: 5MB)
+  max_upload_size: 5242880
+
+  # SSRF protection is handled at the Gotenberg container level via:
+  #   --chromium-deny-list and Docker network isolation
+  # The gateway does NOT inspect or decode request bodies.
+
+  # Allowed Gotenberg route prefixes
+  # Note: Specifying just `/forms/` securely natively supports any new routing engines Gotenberg creates.
+  allowed_routes:
+    - "/forms/"
+    - "/health"
+
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  # Log format: json or text
+  format: "json"

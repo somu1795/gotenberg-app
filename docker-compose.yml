@@ -1,0 +1,115 @@
+# ─────────────────────────────────────────────────────────────────
+# Docker Compose — Production deployment
+#
+# This runs BOTH services as Docker containers:
+#   1. gotenberg   — The PDF conversion engine (hardened)
+#   2. gateway     — The Python reverse proxy (built from Dockerfile)
+#
+# They communicate over an internal Docker network (no internet access).
+#
+# Usage:
+#   docker compose up -d --build    # Start both
+#   docker compose down              # Stop both
+#   ./start.sh                       # Same thing, with health check
+#
+# For development with auto-reload, use instead:
+#   ./start.sh --dev
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  # ── Gotenberg (hardened) ─────────────────────────────────────────
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg
+    restart: unless-stopped
+    env_file: .env
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+    # SSRF protection at the container level
+    command:
+      - "gotenberg"
+      - "--api-port=${GOTENBERG_PORT:-9125}"
+      - "--chromium-deny-list=(?i)(^file:///.*|.*localhost.*|.*127\\.0\\.0\\..*|.*10\\..*|.*172\\.(1[6-9]|2[0-9]|3[01])\\..*|.*192\\.168\\..*|.*169\\.254\\..*|.*0\\.0\\.0\\.0.*|.*metadata\\.google\\.internal.*|.*100\\.100\\.100\\.200.*)"
+      - "--chromium-allow-list=https?://.*"
+      - "--api-timeout=120s"
+
+    # Network: only accessible by the gateway, no internet egress
+    networks:
+      - gotenberg-internal
+    expose:
+      - "${GOTENBERG_PORT:-9125}"
+
+    # Log rotation
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Filesystem hardening
+    read_only: true
+    tmpfs:
+      - /tmp:size=2G
+      - /home/gotenberg:size=512M
+
+    # Chromium needs adequate shared memory (avoids --no-sandbox)
+    shm_size: 1gb
+
+    # Resource limits
+    mem_limit: 6g
+    mem_reservation: 1g
+    cpus: 3.2
+    pids_limit: 500
+
+    # Linux security
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN   # Required for Chromium sandbox
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:${GOTENBERG_PORT:-9125}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── Gateway ──────────────────────────────────────────────────────
+  gateway:
+    build: .
+    container_name: gotenberg-gateway
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${GATEWAY_PORT:-9225}:${GATEWAY_PORT:-9225}"
+    networks:
+      - gotenberg-internal
+      - default
+    environment:
+      - GOTENBERG_URL=http://gotenberg:${GOTENBERG_PORT:-9125}
+      - GATEWAY_PORT=${GATEWAY_PORT:-9225}
+      - GATEWAY_MAX_CONCURRENT=${GATEWAY_MAX_CONCURRENT:-10}
+      - GATEWAY_MAX_QUEUE=${GATEWAY_MAX_QUEUE:-50}
+      - GATEWAY_LOG_LEVEL=${GATEWAY_LOG_LEVEL:-INFO}
+    depends_on:
+      gotenberg:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:${GATEWAY_PORT:-9225}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+    # Log rotation
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  gotenberg-internal:
+    driver: bridge

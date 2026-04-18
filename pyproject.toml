@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: tests requiring a running Gotenberg container on port 1795",
+    "unit: tests that run in isolation without external dependencies",
+]

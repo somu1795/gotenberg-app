@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+Caddyfile
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs and outputs
+logs/
+*.log
+*.pdf
+*.zip
+*.tar.gz
+
+# OS specific
+.DS_Store
+Thumbs.db

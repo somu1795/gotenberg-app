@@ -1,0 +1,48 @@
+# Caddyfile for Gotenberg Gateway
+# 
+# This file provides a production-ready Caddy server configuration 
+# for exposing the local Gotenberg Gateway to the public internet securely.
+
+yourdomain.com {
+    # ── Security Headers ──────────────────────────────────────────────
+    # HSTS enforces HTTPS for all future requests (1 year duration).
+    # Referrer-Policy protects origin privacy.
+    # Note: Caddy automatically redirects port 80 HTTP traffic to port 443 HTTPS.
+    header {
+        Strict-Transport-Security "max-age=31536000;"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # ── Logging ───────────────────────────────────────────────────────
+    # Structured JSON logging for monitoring connection metadata
+    log {
+        output file /var/log/caddy/gotenberg.log {
+            roll_size 10mb
+            roll_keep 20
+            roll_keep_for 720h
+        }
+        format json
+    }
+
+    # ── Reverse Proxy ─────────────────────────────────────────────────
+    # Forwards requests to the Gotenberg Gateway.
+    # Replace `gateway-host` with your actual internal IP or hostname.
+    reverse_proxy gateway-host:9225 {
+        # Securely pass client-identifying headers so the
+        # Gateway's dynamic IP tracker and rate limiter work flawlessly.
+        header_up Host {host}
+        header_up X-Forwarded-Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Gotenberg can sometimes take a long time to convert massive logic.
+        # We raise the timeout to 120 seconds to match the internal Gateway logic.
+        transport http {
+            read_timeout 120s
+            write_timeout 120s
+            dial_timeout 30s
+        }
+    }
+}
