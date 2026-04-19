@@ -4,7 +4,7 @@
 # This is ONLY used when deploying via docker-compose.yml
 # (./start.sh with no flags). It builds the gateway as a container.
 #
-# If running the gateway natively on the host (./start.sh --local),
+# If running the gateway natively on the host (./start.sh --dev),
 # this file is NOT used — Python runs directly from your venv.
 # ─────────────────────────────────────────────────────────────────
 

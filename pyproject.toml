@@ -2,6 +2,6 @@
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
-    "integration: tests requiring a running Gotenberg container on port 1795",
+    "integration: tests requiring a running Gotenberg container on port 9125",
     "unit: tests that run in isolation without external dependencies",
 ]

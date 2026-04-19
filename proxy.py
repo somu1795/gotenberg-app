@@ -24,7 +24,7 @@ class GotenbergProxy:
     def __init__(self, upstream_url: str, timeout: int = 120, circuit_breaker: CircuitBreaker = None):
         """
         Args:
-            upstream_url: Base URL of the Gotenberg container (e.g. http://localhost:1795)
+            upstream_url: Base URL of the Gotenberg container (e.g. http://localhost:9125)
             timeout: Request timeout in seconds.
             circuit_breaker: Circuit breaker instance for upstream failure tracking.
         """

@@ -1,6 +1,6 @@
 # Gotenberg Gateway — API Examples
 
-The Gotenberg Gateway sits as a reverse proxy in front of the [Gotenberg API](https://gotenberg.dev/), protecting it with concurrency limits, circuit breakers, and connection timeouts. Except perfectly passing through all multipart form requests to Gotenberg, the gateway introduces specific features like `X-Request-ID` tracing to help you track jobs effectively.
+The Gotenberg Gateway is a reverse proxy for the [Gotenberg API](https://gotenberg.dev/), adding concurrency limits, circuit breakers, and connection timeouts. All multipart form requests pass through to Gotenberg unchanged — the gateway just adds operational features like `X-Request-ID` tracing for job tracking.
 
 This guide provides practical `curl` examples for the most common operations. Note that all requests are sent to the **Gateway** (default port `9225`), which buffers, safely schedules, and securely routes them to Gotenberg.
 
@@ -49,7 +49,7 @@ curl -X POST http://localhost:9225/forms/chromium/convert/html \
 ```
 
 ### Passing Multiple Assets (HTML + CSS)
-Gotenberg supports receiving multiple files seamlessly. Just upload them using multiple `-F` fields:
+Gotenberg accepts multiple files in a single request. Upload them with separate `-F` fields:
 ```bash
 curl -X POST http://localhost:9225/forms/chromium/convert/html \
   -F "files=@index.html" \

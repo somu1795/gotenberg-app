@@ -29,15 +29,15 @@ yourdomain.com {
     # Forwards requests to the Gotenberg Gateway.
     # Replace `gateway-host` with your actual internal IP or hostname.
     reverse_proxy gateway-host:9225 {
-        # Securely pass client-identifying headers so the
-        # Gateway's dynamic IP tracker and rate limiter work flawlessly.
+        # Pass client-identifying headers so the Gateway's
+        # IP tracker and per-IP rate limiter work correctly.
         header_up Host {host}
         header_up X-Forwarded-Host {host}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
 
-        # Gotenberg can sometimes take a long time to convert massive logic.
+        # Large HTML pages or LibreOffice documents can take a while to convert.
         # We raise the timeout to 120 seconds to match the internal Gateway logic.
         transport http {
             read_timeout 120s

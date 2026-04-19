@@ -81,6 +81,8 @@ curl -X POST http://localhost:9225/forms/chromium/convert/html \
   -F "files=@index.html" -o output.pdf
 ```
 
+> For more examples (HTML with assets, Markdown, LibreOffice, PDF merging), see [API_EXAMPLES.md](API_EXAMPLES.md).
+
 ## Configuration
 
 ### Environment Variables
@@ -89,6 +91,7 @@ curl -X POST http://localhost:9225/forms/chromium/convert/html \
 |----------|-------------|---------|
 | `GATEWAY_PORT` | Gateway listen port | `9225` |
 | `GATEWAY_HOST` | Gateway bind host | `0.0.0.0` |
+| `GOTENBERG_PORT` | Gotenberg container port | `9125` |
 | `GOTENBERG_URL` | Upstream Gotenberg URL | `http://localhost:9125` |
 | `GATEWAY_MAX_CONCURRENT` | Max simultaneous Gotenberg jobs | `10` |
 | `GATEWAY_MAX_QUEUE` | Max queued requests | `50` |
@@ -159,20 +162,20 @@ If there is a massive spike of **10,000+ simultaneous requests**, here is exactl
 #### 1. Single-IP DDoS (Script Kiddie / Spam)
 If a single malicious IP hammers the server at once:
 * They instantly hit their `per_ip_concurrent` limit (default 2) and their `per_ip_queue` limit (default 5).
-* The gateway immediately rejects their remaining 9,993 requests with a seamless `503 Service Unavailable`.
-* Gotenberg processes their 2 documents oblivious to the spam, while the remaining 8 global capacity slots are **fully accessible and unharmed for genuine users.**
+* The gateway rejects their remaining 9,993 requests with `503 Service Unavailable`.
+* Gotenberg processes their 2 allowed documents normally, and the remaining 8 global slots stay **open for other users.**
 
 #### 2. Botnet DDoS (Thousands of unique IPs)
 If 10,000 unique malicious IPs attack your node simultaneously:
 * The gateway allows 10 concurrent slots and 50 queue slots to fill up globally.
-* The remaining 9,940 requests are instantly fast-rejected at the reverse proxy layer (yielding `503` + `Retry-After`). 
-* Because Python's `asyncio` handles 10,000 connection rejections in milliseconds natively, your server's CPU hardly flinches. Meanwhile, Gotenberg sits comfortably in its container executing exactly 10 PDFs safely without ever crashing, exceeding RAM, or experiencing lag.
+* The remaining 9,940 requests are fast-rejected at the proxy layer (`503` + `Retry-After`).
+* Python's `asyncio` handles 10,000 connection rejections in milliseconds, so CPU impact is negligible. Gotenberg continues processing exactly 10 PDFs in its container without crashing or exceeding RAM.
 
 #### 3. High Genuine Load (Viral Traffic)
 When legitimate workflows spike:
-* The queue predictably smooths the load. Up to 50 requests can temporarily wait in line.
-* Because the server maintains a tight grip on active workers (10 max), Gotenberg isn't slowing down attempting to memory-swap the workloads; it processes those 10 efficiently, then immediately slides the next queued items in over minutes. 
-* Any legitimate client that exceeds the queue length receives a structured `503 Retry-After`, allowing automated upstream services to gracefully back off completely natively without losing data or risking system instability.
+* The queue smooths the load — up to 50 requests wait in line while slots are busy.
+* Because active workers are capped (10 max), Gotenberg never overcommits memory. It processes 10 jobs efficiently, then pulls the next batch from the queue.
+* Clients that exceed the queue length receive a `503` with a `Retry-After` header, letting upstream services back off and retry without data loss.
 
 ### Middleware Stack
 
@@ -215,7 +218,7 @@ When legitimate workflows spike:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| ALL | `/forms/*` | All native Gotenberg conversion routes (Chromium, LibreOffice, PDFEngines, etc) are transparently and natively supported without hardcoded updates required. |
+| ALL | `/forms/*` | All Gotenberg conversion routes (Chromium, LibreOffice, PDFEngines, etc.) are proxied through. New engines work automatically — no gateway updates needed. |
 
 ### Response Codes
 
@@ -292,10 +295,10 @@ When legitimate workflows spike:
 #### Health Output & Circuit Breaker Explained:
 * **`gateway`**: Lifetime statistical insights. **Queue Timeouts** represent requests that waited too long in the queue without getting a slot and were rejected `HTTP 408`. **Total Rejected** is `HTTP 503` dropouts when the queue was simply full.
 * **`circuit_breaker`**: Protects Gotenberg from falling into a spiral of death. 
-  * If Gotenberg actively crashes or hits RAM limits and consistently times out (`failure_timeout = 5`), the circuit breaker transitions from `"closed"` (healthy flow) to **`"open"`**.
+  * If Gotenberg crashes or hits RAM limits and consistently fails (`failure_threshold = 5`), the circuit breaker transitions from `"closed"` (healthy) to **`"open"`**.
   * When `"open"`, the Gateway immediately rejects all incoming requests with `503 Service Busy` — *without* passing them to Gotenberg — saving Gotenberg from compounding requests while it recovers memory.
   * After `recovery_timeout_seconds` (e.g. 30s), it enters `"half-open"` state, passing exactly 1 request through. If it succeeds, the circuit fully closes back to normal operation. 
-* **`gotenberg.status`**: The live result of an internal `HTTP 200` ping from the proxy to the Gotenberg container, proving the upstream engine is natively alive.
+* **`gotenberg.status`**: The result of an internal `HTTP 200` ping from the proxy to the Gotenberg container, confirming the upstream service is running.
 
 ## Testing
 
@@ -304,7 +307,7 @@ When legitimate workflows spike:
 pip install -r requirements.txt
 pip install pytest pytest-asyncio
 
-# Run all tests (73 tests)
+# Run all tests (76 tests)
 python -m pytest tests/ -v
 
 # Run specific modules
@@ -347,6 +350,8 @@ pdf.yourdomain.com {
 
 Caddy automatically provisions and renews TLS certificates via Let's Encrypt.
 
+> For a production-ready Caddyfile with security headers and logging, see [Caddyfile.example](Caddyfile.example).
+
 ## Project Structure
 
 ```
@@ -356,8 +361,12 @@ gotenberg-app/
 ├── config.py                    # Configuration loader (YAML + env vars)
 ├── config.yaml                  # Default configuration
 ├── requirements.txt             # Python dependencies
+├── pyproject.toml               # Pytest configuration
 ├── Dockerfile                   # Gateway Docker image (used by docker-compose)
 ├── docker-compose.yml           # Full stack (gateway + Gotenberg)
+├── .env.example                 # Environment variable template
+├── Caddyfile.example            # Production Caddy reverse proxy config
+├── API_EXAMPLES.md              # Detailed curl examples for every endpoint
 ├── start.sh                     # Start script (compose or dev mode)
 ├── stop.sh                      # Stop script
 ├── middleware/

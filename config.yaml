@@ -55,7 +55,7 @@ security:
   # The gateway does NOT inspect or decode request bodies.
 
   # Allowed Gotenberg route prefixes
-  # Note: Specifying just `/forms/` securely natively supports any new routing engines Gotenberg creates.
+  # Note: Using `/forms/` as a prefix means any new Gotenberg conversion engines are supported automatically.
   allowed_routes:
     - "/forms/"
     - "/health"
