@@ -124,6 +124,38 @@ concurrency:
 
 #### Circuit Breaker
 
+The circuit breaker prevents a failing Gotenberg instance from dragging down the entire gateway.
+
+Gotenberg runs Chromium and LibreOffice under the hood. Both are memory-intensive — a large HTML page or a complex spreadsheet can push Chromium into OOM territory, causing it to crash or hang. If the gateway keeps forwarding requests to a Gotenberg instance in this state, every new request piles onto an already struggling process: timeouts cascade, the queue fills up with doomed requests, and the whole system stalls.
+
+The circuit breaker solves this by tracking failures and cutting off traffic when Gotenberg is clearly unhealthy, giving it time to recover on its own.
+
+**What counts as a failure:**
+- Gotenberg returns an HTTP 5xx status code
+- The request times out (Gotenberg didn't respond within `request_timeout`)
+- The gateway can't connect to Gotenberg at all (container down, network issue)
+
+**What counts as a success:**
+- Any response below HTTP 500 (including 4xx — a bad request is the client's fault, not Gotenberg's)
+- A single success resets the failure count to zero
+
+**State machine:**
+
+```
+  CLOSED (normal operation)
+    │
+    │  failure_threshold reached
+    ▼
+  OPEN (all requests get 503 immediately, Gotenberg is left alone)
+    │
+    │  recovery_timeout elapses
+    ▼
+  HALF_OPEN (one probe request allowed through)
+    │
+    ├── probe succeeds → CLOSED (back to normal)
+    └── probe fails    → OPEN (wait again)
+```
+
 ```yaml
 circuit_breaker:
   failure_threshold: 5   # Failures before opening circuit
@@ -294,10 +326,11 @@ When legitimate workflows spike:
 
 #### Health Output & Circuit Breaker Explained:
 * **`gateway`**: Lifetime statistical insights. **Queue Timeouts** represent requests that waited too long in the queue without getting a slot and were rejected `HTTP 408`. **Total Rejected** is `HTTP 503` dropouts when the queue was simply full.
-* **`circuit_breaker`**: Protects Gotenberg from cascading failures. 
-  * After `failure_threshold` consecutive failures, the circuit transitions from `"closed"` (healthy) to **`"open"`**.
-  * When `"open"`, the Gateway rejects all incoming requests with `503 Service Busy` — *without* passing them to Gotenberg — giving it time to recover.
-  * After `recovery_timeout_seconds` elapses, it enters `"half-open"` state, passing exactly 1 probe request through. If it succeeds, the circuit fully closes back to normal. 
+* **`circuit_breaker`**: Current state of the upstream failure detector.
+  * `state`: One of `"closed"` (healthy — requests flow normally), `"open"` (Gotenberg is failing — all requests rejected with 503), or `"half_open"` (recovery check in progress — one probe request allowed through).
+  * `failure_count`: How many consecutive failures have occurred since the last success. Resets to zero on any successful response.
+  * `failure_threshold`: How many failures trigger the circuit to open. Once `failure_count` reaches this value, the circuit opens and all traffic to Gotenberg stops.
+  * `recovery_timeout_seconds`: How long the circuit stays open before allowing a single probe request through. If the probe succeeds, the circuit closes and normal operation resumes. If it fails, the circuit re-opens for another timeout period.
 * **`gotenberg.status`**: The result of an internal `HTTP 200` ping from the proxy to the Gotenberg container, confirming the upstream service is running.
 
 ## Testing
