@@ -5,12 +5,12 @@ A robust, production-ready reverse proxy for the [Gotenberg](https://gotenberg.d
 ## How It Works
 
 ```
-Internet ──→ [Caddy/VPS] ──→ [Gateway :9225] ──→ [Gotenberg :9125]
-               TLS              │                      │
-               reverse       Pure pass-through    Hardened container
-               proxy         Admission control    Read-only filesystem
-                             Circuit breaker      SSRF deny list
-                             Per-IP fairness      Network isolated
+Internet ──→ [Caddy/VPS] ──→ [Gateway] ──→ [Gotenberg]
+               TLS            │                │
+               reverse     Pure pass-through    Hardened container
+               proxy       Admission control    Read-only filesystem
+                           Circuit breaker      SSRF deny list
+                           Per-IP fairness      Network isolated
 ```
 
 The gateway acts as a **pure pass-through proxy** — it never decodes or inspects request bodies. All content-level security (SSRF protection, file access) is handled at the Gotenberg container level.
@@ -21,7 +21,7 @@ The gateway acts as a **pure pass-through proxy** — it never decodes or inspec
 |---------|-------------|
 | 🚦 **Concurrency Control** | Bounded concurrent jobs + wait queue. Serves as many users as possible, tells the rest "try again" |
 | 🔄 **Circuit Breaker** | Auto-detects when Gotenberg is failing. Stops sending requests, recovers automatically |
-| ⚖️ **Per-IP Fairness** | Max 2 concurrent + 5 queued per IP. One user can't starve others |
+| ⚖️ **Per-IP Fairness** | Configurable per-IP concurrent and queue limits. One user can't starve others |
 | 📋 **Route Whitelisting** | Only allows configured Gotenberg API routes |
 | 🌐 **IP Filtering** | Allowlist/blocklist with CIDR support |
 | 📏 **Upload Size Limits** | Reject oversized requests before they hit Gotenberg |
@@ -38,8 +38,8 @@ The gateway acts as a **pure pass-through proxy** — it never decodes or inspec
 Both gateway and Gotenberg run as Docker containers on an isolated internal network.
 
 ```
-[Gateway container :9225] ──→ [Gotenberg container :9125]
-  Built from Dockerfile          Official image (hardened)
+[Gateway container] ──→ [Gotenberg container]
+  Built from Dockerfile    Official image (hardened)
   └── internal Docker network (no internet egress) ──┘
 ```
 
@@ -57,8 +57,8 @@ Gotenberg runs in Docker, gateway runs on your machine with auto-reload.
 The `Dockerfile` and `docker-compose.yml` are NOT used in this mode.
 
 ```
-localhost ──→ [uvicorn gateway :9225] ──→ [Gotenberg container :9125]
-              auto-reloads on save        docker run (in start.sh)
+localhost ──→ [uvicorn gateway] ──→ [Gotenberg container]
+              auto-reloads on save    docker run (in start.sh)
 ```
 
 ```bash
@@ -69,15 +69,15 @@ localhost ──→ [uvicorn gateway :9225] ──→ [Gotenberg container :9125
 ### Try It
 
 ```bash
-# Health check
-curl http://localhost:9225/health | python3 -m json.tool
+# Health check (replace port with your GATEWAY_PORT)
+curl http://localhost:$GATEWAY_PORT/health | python3 -m json.tool
 
 # Convert a URL to PDF
-curl -X POST http://localhost:9225/forms/chromium/convert/url \
+curl -X POST http://localhost:$GATEWAY_PORT/forms/chromium/convert/url \
   --form url=https://example.com -o example.pdf
 
 # Convert HTML to PDF
-curl -X POST http://localhost:9225/forms/chromium/convert/html \
+curl -X POST http://localhost:$GATEWAY_PORT/forms/chromium/convert/html \
   -F "files=@index.html" -o output.pdf
 ```
 
@@ -149,7 +149,7 @@ Request arrives
   │
   ├── Slot free? ──→ Run immediately
   │
-  ├── Queue has room? ──→ Wait in queue (up to 60s)
+  ├── Queue has room? ──→ Wait in queue (up to queue_timeout)
   │                       └── Timeout → 408 "Timed out, retry"
   │
   └── Queue full? ──→ 503 "Service busy, retry in ~Xs"
@@ -161,20 +161,20 @@ If there is a massive spike of **10,000+ simultaneous requests**, here is exactl
 
 #### 1. Single-IP DDoS (Script Kiddie / Spam)
 If a single malicious IP hammers the server at once:
-* They instantly hit their `per_ip_concurrent` limit (default 2) and their `per_ip_queue` limit (default 5).
-* The gateway rejects their remaining 9,993 requests with `503 Service Unavailable`.
-* Gotenberg processes their 2 allowed documents normally, and the remaining 8 global slots stay **open for other users.**
+* They instantly hit their `per_ip_concurrent` and `per_ip_queue` limits.
+* The gateway rejects the overflow with `503 Service Unavailable`.
+* Gotenberg processes only that IP's allowed concurrent documents, and the remaining global slots stay **open for other users.**
 
 #### 2. Botnet DDoS (Thousands of unique IPs)
 If 10,000 unique malicious IPs attack your node simultaneously:
-* The gateway allows 10 concurrent slots and 50 queue slots to fill up globally.
-* The remaining 9,940 requests are fast-rejected at the proxy layer (`503` + `Retry-After`).
-* Python's `asyncio` handles 10,000 connection rejections in milliseconds, so CPU impact is negligible. Gotenberg continues processing exactly 10 PDFs in its container without crashing or exceeding RAM.
+* The gateway fills the `max_concurrent` slots and `max_queue` positions globally.
+* All remaining requests are fast-rejected at the proxy layer (`503` + `Retry-After`).
+* Python's `asyncio` handles mass connection rejections in milliseconds, so CPU impact is negligible. Gotenberg continues processing its allowed concurrent batch without crashing or exceeding RAM.
 
 #### 3. High Genuine Load (Viral Traffic)
 When legitimate workflows spike:
-* The queue smooths the load — up to 50 requests wait in line while slots are busy.
-* Because active workers are capped (10 max), Gotenberg never overcommits memory. It processes 10 jobs efficiently, then pulls the next batch from the queue.
+* The queue smooths the load — excess requests wait in line while slots are busy.
+* Because active workers are capped at `max_concurrent`, Gotenberg never overcommits memory. It processes jobs efficiently, then pulls the next batch from the queue.
 * Clients that exceed the queue length receive a `503` with a `Retry-After` header, letting upstream services back off and retry without data loss.
 
 ### Middleware Stack
@@ -237,34 +237,34 @@ When legitimate workflows spike:
 ```json
 {
   "service": "Gotenberg Gateway",
-  "version": "2.0.0",
+  "version": "...",
   "status": "running",
   "docs": "/docs",
   "health": "/health",
   "client": {
-    "ip": "127.0.0.1",
+    "ip": "<your-ip>",
     "active_jobs": 0,
     "queued_jobs": 0
   },
   "capacity": {
-    "max_concurrent": 10,
-    "max_queue": 50,
-    "per_ip_concurrent": 2,
-    "per_ip_queue": 5,
+    "max_concurrent": "<from config>",
+    "max_queue": "<from config>",
+    "per_ip_concurrent": "<from config>",
+    "per_ip_queue": "<from config>",
     "active_jobs": 0,
     "queued_jobs": 0
   },
   "features": {
     "circuit_breaker": "enabled",
-    "max_upload_size_mb": 5.0
+    "max_upload_size_mb": "<from config>"
   }
 }
 ```
 
 #### Info Output Explained:
-* **`client`**: Displays your detected IP, securely parsed even through Cloudflare/Caddy via headers. It additionally displays your specific current active conversion jobs and how many requests you specifically have waiting in the queue.
-* **`capacity`**: Reflects the global capacity of the service. `max_concurrent` is how many concurrent jobs the server processes simultaneously. `per_ip_concurrent` limits how many of those your IP can monopolize. `active_jobs` reflects global instantaneous usage.
-* **`features`**: Gateway-level enforcements like `max_upload_size_mb` ensuring your request drops at the proxy level without flooding external memory.
+* **`client`**: Your detected IP (parsed from proxy headers like `X-Forwarded-For`), plus your current active and queued job counts.
+* **`capacity`**: Global service capacity — the configured limits and current utilization.
+* **`features`**: Gateway-level enforcements like upload size limits.
 
 ### Health Check Response (`/health`)
 
@@ -282,8 +282,8 @@ When legitimate workflows spike:
   "circuit_breaker": {
     "state": "closed",
     "failure_count": 0,
-    "failure_threshold": 5,
-    "recovery_timeout_seconds": 30
+    "failure_threshold": "<from config>",
+    "recovery_timeout_seconds": "<from config>"
   },
   "gotenberg": {
     "status": "healthy",
@@ -294,10 +294,10 @@ When legitimate workflows spike:
 
 #### Health Output & Circuit Breaker Explained:
 * **`gateway`**: Lifetime statistical insights. **Queue Timeouts** represent requests that waited too long in the queue without getting a slot and were rejected `HTTP 408`. **Total Rejected** is `HTTP 503` dropouts when the queue was simply full.
-* **`circuit_breaker`**: Protects Gotenberg from falling into a spiral of death. 
-  * If Gotenberg crashes or hits RAM limits and consistently fails (`failure_threshold = 5`), the circuit breaker transitions from `"closed"` (healthy) to **`"open"`**.
-  * When `"open"`, the Gateway immediately rejects all incoming requests with `503 Service Busy` — *without* passing them to Gotenberg — saving Gotenberg from compounding requests while it recovers memory.
-  * After `recovery_timeout_seconds` (e.g. 30s), it enters `"half-open"` state, passing exactly 1 request through. If it succeeds, the circuit fully closes back to normal operation. 
+* **`circuit_breaker`**: Protects Gotenberg from cascading failures. 
+  * After `failure_threshold` consecutive failures, the circuit transitions from `"closed"` (healthy) to **`"open"`**.
+  * When `"open"`, the Gateway rejects all incoming requests with `503 Service Busy` — *without* passing them to Gotenberg — giving it time to recover.
+  * After `recovery_timeout_seconds` elapses, it enters `"half-open"` state, passing exactly 1 probe request through. If it succeeds, the circuit fully closes back to normal. 
 * **`gotenberg.status`**: The result of an internal `HTTP 200` ping from the proxy to the Gotenberg container, confirming the upstream service is running.
 
 ## Testing
@@ -337,7 +337,7 @@ Add to your Caddyfile on the VPS:
 
 ```
 pdf.yourdomain.com {
-    reverse_proxy your-tailscale-ip:9225 {
+    reverse_proxy your-internal-ip:$GATEWAY_PORT {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         transport http {
