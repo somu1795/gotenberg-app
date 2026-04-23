@@ -44,6 +44,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _extract_client_ip(request: Request) -> str:
         """Extract the real client IP, respecting proxy headers."""
+        # CF-Connecting-IP (Cloudflare)
+        cf_ip = request.headers.get("cf-connecting-ip")
+        if cf_ip:
+            return cf_ip.strip()
+
         # X-Forwarded-For: client, proxy1, proxy2
         xff = request.headers.get("x-forwarded-for")
         if xff:

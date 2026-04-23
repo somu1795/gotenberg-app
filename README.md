@@ -371,8 +371,7 @@ Add to your Caddyfile on the VPS:
 ```
 pdf.yourdomain.com {
     reverse_proxy your-internal-ip:$GATEWAY_PORT {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+        header_up Host {host}
         transport http {
             read_timeout 120s
             write_timeout 120s

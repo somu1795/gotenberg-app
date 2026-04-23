@@ -33,8 +33,7 @@ yourdomain.com {
         # IP tracker and per-IP rate limiter work correctly.
         header_up Host {host}
         header_up X-Forwarded-Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+
         header_up X-Forwarded-Proto {scheme}
 
         # Large HTML pages or LibreOffice documents can take a while to convert.
