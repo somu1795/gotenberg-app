@@ -94,7 +94,7 @@ curl -X POST http://localhost:$GATEWAY_PORT/forms/chromium/convert/html \
 | `GOTENBERG_PORT` | Gotenberg container port | `9125` |
 | `GOTENBERG_URL` | Upstream Gotenberg URL | `http://localhost:9125` |
 | `GATEWAY_MAX_CONCURRENT` | Max simultaneous Gotenberg jobs | `10` |
-| `GATEWAY_MAX_QUEUE` | Max queued requests | `50` |
+| `GATEWAY_MAX_QUEUE` | Max queued requests | `100` |
 | `GATEWAY_LOG_LEVEL` | Log level (DEBUG/INFO/WARNING/ERROR) | `INFO` |
 
 ### config.yaml
@@ -116,7 +116,7 @@ See [config.yaml](config.yaml) for the full configuration reference with comment
 ```yaml
 concurrency:
   max_concurrent: 10    # Simultaneous Gotenberg jobs
-  max_queue: 50         # Waiting room size
+  max_queue: 100         # Waiting room size
   queue_timeout: 60     # Max wait in queue (seconds)
   per_ip_concurrent: 2  # Max concurrent per IP
   per_ip_queue: 5       # Max queued per IP

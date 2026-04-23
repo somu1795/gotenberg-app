@@ -29,7 +29,7 @@ class TestConfigDefaults:
 
     def test_default_max_queue(self, tmp_path):
         cfg = load_config(str(tmp_path / "nonexistent.yaml"))
-        assert cfg.concurrency.max_queue == 50
+        assert cfg.concurrency.max_queue == 100
 
     def test_default_per_ip_concurrent(self, tmp_path):
         cfg = load_config(str(tmp_path / "nonexistent.yaml"))

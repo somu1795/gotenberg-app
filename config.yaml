@@ -19,7 +19,7 @@ concurrency:
   max_concurrent: 10
 
   # Maximum requests waiting in queue when all slots are busy
-  max_queue: 50
+  max_queue: 100
 
   # How long a request waits in queue before timing out (seconds)
   queue_timeout: 60

@@ -153,15 +153,32 @@ class MaxBodySizeMiddleware(BaseHTTPMiddleware):
         self.max_size = max_size
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        # Fast path: check Content-Length header if present
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > self.max_size:
-            max_mb = self.max_size / (1024 * 1024)
-            return JSONResponse(
-                status_code=413,
-                content={
-                    "error": "Payload Too Large",
-                    "message": f"Request body exceeds maximum allowed size of {max_mb:.0f} MB.",
-                    "code": 413,
-                },
-            )
+        if content_length:
+            try:
+                if int(content_length) > self.max_size:
+                    return self._too_large_response()
+            except ValueError:
+                return self._too_large_response()
+
+        # For requests without Content-Length (e.g. chunked transfer encoding),
+        # read the actual body and check its size. Without this, the size limit
+        # is trivially bypassed by omitting the Content-Length header.
+        elif request.method in ("POST", "PUT", "PATCH"):
+            body = await request.body()
+            if len(body) > self.max_size:
+                return self._too_large_response()
+
         return await call_next(request)
+
+    def _too_large_response(self) -> JSONResponse:
+        max_mb = self.max_size / (1024 * 1024)
+        return JSONResponse(
+            status_code=413,
+            content={
+                "error": "Payload Too Large",
+                "message": f"Request body exceeds maximum allowed size of {max_mb:.0f} MB.",
+                "code": 413,
+            },
+        )

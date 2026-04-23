@@ -27,7 +27,7 @@ class GotenbergConfig:
 @dataclass
 class ConcurrencyConfig:
     max_concurrent: int = 10
-    max_queue: int = 50
+    max_queue: int = 100
     queue_timeout: int = 60
     per_ip_concurrent: int = 2
     per_ip_queue: int = 5

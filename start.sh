@@ -156,7 +156,7 @@ case "${1:-}" in
         echo "  GATEWAY_PORT           Port to listen on (default: 9225)"
         echo "  GOTENBERG_PORT         Gotenberg upstream port (default: 9125)"
         echo "  GATEWAY_MAX_CONCURRENT Max simultaneous Gotenberg jobs (default: 10)"
-        echo "  GATEWAY_MAX_QUEUE      Max queued requests (default: 50)"
+        echo "  GATEWAY_MAX_QUEUE      Max queued requests (default: 100)"
         echo "  GATEWAY_LOG_LEVEL      Log level: DEBUG/INFO/WARNING/ERROR (default: INFO)"
         ;;
     *)
