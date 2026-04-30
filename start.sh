@@ -7,6 +7,8 @@
 #   ./start.sh              Production: both gateway + Gotenberg in containers
 #                           Uses: docker-compose.yml + Dockerfile
 #
+#   ./start.sh --update     Same as above, but pulls latest images first
+#
 #   ./start.sh --dev        Development: Gotenberg in Docker, gateway locally
 #                           with uvicorn --reload for instant code reloading
 #
@@ -68,6 +70,13 @@ wait_for_health() {
 
 # ── Docker Compose mode (default) ────────────────────────────────
 start_compose() {
+    local do_pull="${1:-false}"
+
+    if [ "$do_pull" = "true" ]; then
+        log "Pulling latest images..."
+        docker compose pull
+    fi
+
     log "Starting Gotenberg Gateway via Docker Compose..."
 
     # Clean up any standalone containers that would block compose
@@ -140,15 +149,19 @@ start_dev() {
 
 # ── Main ─────────────────────────────────────────────────────────
 case "${1:-}" in
+    --update)
+        start_compose true
+        ;;
     --dev)
         start_dev
         ;;
     --help|-h)
-        echo "Usage: ./start.sh [--dev|--help]"
+        echo "Usage: ./start.sh [--update|--dev|--help]"
         echo ""
         echo "Deployment modes:"
         echo "  (default)   Production: both gateway + Gotenberg in containers"
         echo "              Uses: docker-compose.yml + Dockerfile"
+        echo "  --update    Same as default, but pulls latest images first"
         echo "  --dev       Development: Gotenberg in Docker, gateway with auto-reload"
         echo "              Uses: docker run + uvicorn --reload"
         echo ""
